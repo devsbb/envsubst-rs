@@ -1,4 +1,4 @@
-use std::io::{Cursor, BufReader};
+use std::io::{BufReader, Cursor};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use envsubst::Parser;
@@ -11,7 +11,9 @@ $PWD
 "#;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let huge_template = (0..10_000).map(|_| TEMPLATE.to_owned()).collect::<Vec<String>>();
+    let huge_template = (0..10_000)
+        .map(|_| TEMPLATE.to_owned())
+        .collect::<Vec<String>>();
     let huge_template = huge_template.join("\n");
     c.bench_function("render", |b| {
         b.iter(|| {
