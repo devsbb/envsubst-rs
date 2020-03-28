@@ -68,19 +68,19 @@ where
     }
 
     fn parse_char(&mut self, current_char: char) -> Result<()> {
-        if self.start_parsing_variable(&current_char)? {
+        if self.start_parsing_variable(current_char)? {
             return Ok(());
         }
 
-        if self.check_braces_opening(&current_char)? {
+        if self.check_braces_opening(current_char)? {
             return Ok(());
         }
 
-        if self.check_braces_ending(&current_char)? {
+        if self.check_braces_ending(current_char)? {
             return Ok(());
         }
 
-        if self.check_whitespace(&current_char)? {
+        if self.check_whitespace(current_char)? {
             return Ok(());
         }
 
@@ -101,13 +101,13 @@ where
             self.reset_state();
         }
 
-        self.write_char(&current_char)?;
+        self.write_char(current_char)?;
 
         Ok(())
     }
 
-    fn start_parsing_variable(&mut self, current_char: &char) -> Result<bool> {
-        if *current_char == VARIABLE {
+    fn start_parsing_variable(&mut self, current_char: char) -> Result<bool> {
+        if current_char == VARIABLE {
             if self.parsing_variable {
                 anyhow::bail!("Variable is already being parsed")
             }
@@ -118,8 +118,8 @@ where
         Ok(false)
     }
 
-    fn check_braces_opening(&mut self, current_char: &char) -> Result<bool> {
-        if *current_char == START && self.parsing_variable {
+    fn check_braces_opening(&mut self, current_char: char) -> Result<bool> {
+        if current_char == START && self.parsing_variable {
             if self.open_braces {
                 anyhow::bail!("Double open braces")
             }
@@ -130,8 +130,8 @@ where
         Ok(false)
     }
 
-    fn check_braces_ending(&mut self, current_char: &char) -> Result<bool> {
-        if *current_char == END && self.parsing_variable {
+    fn check_braces_ending(&mut self, current_char: char) -> Result<bool> {
+        if current_char == END && self.parsing_variable {
             if !self.open_braces {
                 anyhow::bail!("Closing braces without opening");
             }
@@ -142,7 +142,7 @@ where
         Ok(false)
     }
 
-    fn check_whitespace(&mut self, current_char: &char) -> Result<bool> {
+    fn check_whitespace(&mut self, current_char: char) -> Result<bool> {
         if current_char.is_ascii_whitespace() && self.parsing_variable {
             if self.open_braces {
                 anyhow::bail!("Braces not closed");
@@ -182,7 +182,7 @@ where
         self.current_variable_name.clear();
     }
 
-    fn write_char(&mut self, current_char: &char) -> Result<()> {
+    fn write_char(&mut self, current_char: char) -> Result<()> {
         // TODO: No way to access bytes from char?
         self.output.write_all(current_char.to_string().as_bytes())?;
         Ok(())
