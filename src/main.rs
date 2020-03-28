@@ -5,9 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use structopt::StructOpt;
 
-use crate::parser::Parser;
-
-mod parser;
+use envsubst::Parser;
 
 #[derive(Debug, StructOpt)]
 struct Config {

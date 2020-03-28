@@ -9,3 +9,13 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.26"
 structopt = "0.3.12"
+
+[dev-dependencies]
+criterion = "0.3.1"
+
+[[bench]]
+name = "rendering"
+harness = false
+
+[profile.release]
+debug = true
