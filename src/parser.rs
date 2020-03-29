@@ -41,12 +41,12 @@ where
 
     pub fn process(&mut self) -> Result<()> {
         let mut line = String::new();
-        let mut line_number = 0;
-        loop {
+        let mut last_processed_line = 0;
+        for line_number in 1.. {
             if self.input.read_line(&mut line)? == 0 {
                 break;
             };
-            line_number += 1;
+            last_processed_line = line_number;
 
             for current_char in line.chars() {
                 self.parse_char(current_char)?;
@@ -60,7 +60,7 @@ where
         if self.parsing_variable {
             anyhow::bail!(
                 "Failed to parse a variable on line {} missing a '}}' after '{}'",
-                line_number,
+                last_processed_line,
                 self.current_variable_name
             );
         }
@@ -195,6 +195,7 @@ mod tests {
     use std::io::{BufReader, Cursor};
 
     use crate::parser::Parser;
+    use std::panic;
 
     fn render(template: &str, expected: &str, fail_when_not_found: bool) {
         let mut input = BufReader::new(Cursor::new(template));
@@ -247,5 +248,20 @@ mod tests {
         for template in &["$TEST_MISSING", "${TEST_MISSING}"] {
             render(template, "", false);
         }
+    }
+
+    #[test]
+    fn test_open_braces() {
+        let mut input = BufReader::new(Cursor::new("${OPEN_BRACES"));
+        let mut output = Cursor::new(Vec::new());
+
+        let mut parser = Parser::new(&mut input, &mut output, true);
+        let result = parser.process();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Failed to parse a variable on line 1 missing a '}' after 'OPEN_BRACES'"
+        );
     }
 }
