@@ -1,0 +1,3 @@
+[clog]
+repository = "https://github.com/devsbb/envsubst-rs"
+from-latest-tag = true
