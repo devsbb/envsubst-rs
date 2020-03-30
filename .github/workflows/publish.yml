@@ -1,0 +1,41 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install musl toolchain
+      run: rustup target add x86_64-unknown-linux-musl
+    - name: Bundle
+      run: |
+        set -ex
+        # Strip git ref prefix from version
+        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+
+        # Strip "v" prefix from tag name
+        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+
+        mkdir gh-release
+        for target in x86_64-unknown-linux-musl; do
+          cargo build --release --target $target
+          cp target/$target/release/envsubst .
+          current_file=envsubst-rs-${target}-${VERSION}.tar.gz
+          tar zcvf $current_file envsubst LICENSE
+          mv $current_file gh-release
+        done
+        find gh-release
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          gh-release/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
