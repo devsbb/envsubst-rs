@@ -9,6 +9,19 @@ const START: char = b'{' as char;
 const END: char = b'}' as char;
 const VALID_CHARS: [char; 1] = [b'_' as char];
 
+#[derive(Debug, PartialEq)]
+enum State {
+    TextOutput,
+    ParsingVariable,
+    OpenBraces,
+}
+
+#[derive(Debug, PartialEq)]
+enum ParseCharResult {
+    Consumed,
+    Ignored,
+}
+
 pub struct Parser<R, W>
 where
     R: BufRead,
@@ -19,8 +32,7 @@ where
     fail_when_not_found: bool,
 
     current_variable_name: String,
-    parsing_variable: bool,
-    open_braces: bool,
+    state: State,
 }
 
 impl<R, W> Parser<R, W>
@@ -34,8 +46,7 @@ where
             output: BufWriter::new(output),
             fail_when_not_found,
             current_variable_name: "".to_owned(),
-            parsing_variable: false,
-            open_braces: false,
+            state: State::TextOutput,
         }
     }
 
@@ -51,13 +62,13 @@ where
             for current_char in line.chars() {
                 self.parse_char(current_char)?;
             }
-            if self.parsing_variable && !self.open_braces {
+            if self.state == State::ParsingVariable {
                 self.write_variable()?;
             }
             line.clear();
         }
 
-        if self.parsing_variable {
+        if self.state != State::TextOutput {
             anyhow::bail!(
                 "Failed to parse a variable on line {} missing a '}}' after '{}'",
                 last_processed_line,
@@ -68,29 +79,29 @@ where
     }
 
     fn parse_char(&mut self, current_char: char) -> Result<()> {
-        if self.start_parsing_variable(current_char)? {
+        if self.start_parsing_variable(current_char)? == ParseCharResult::Consumed {
             return Ok(());
         }
 
-        if self.check_braces_opening(current_char)? {
+        if self.check_braces_opening(current_char)? == ParseCharResult::Consumed {
             return Ok(());
         }
 
-        if self.check_braces_ending(current_char)? {
+        if self.check_braces_ending(current_char)? == ParseCharResult::Consumed {
             return Ok(());
         }
 
-        if self.check_whitespace(current_char)? {
+        if self.check_whitespace(current_char)? == ParseCharResult::Consumed {
             return Ok(());
         }
 
-        if self.parsing_variable {
+        if self.state == State::ParsingVariable || self.state == State::OpenBraces {
             if VALID_CHARS.contains(&current_char) || current_char.is_alphabetic() {
                 self.current_variable_name.push(current_char);
                 return Ok(());
             }
 
-            if self.open_braces {
+            if self.state == State::OpenBraces {
                 anyhow::bail!(
                     "Failed to parse variable {} with extra character '{}'",
                     &self.current_variable_name,
@@ -106,52 +117,65 @@ where
         Ok(())
     }
 
-    fn start_parsing_variable(&mut self, current_char: char) -> Result<bool> {
+    fn start_parsing_variable(&mut self, current_char: char) -> Result<ParseCharResult> {
         if current_char == VARIABLE {
-            if self.parsing_variable {
+            if self.state == State::ParsingVariable {
                 anyhow::bail!("Variable is already being parsed")
             }
-            self.parsing_variable = true;
-            return Ok(true);
+            self.state = State::ParsingVariable;
+            return Ok(ParseCharResult::Consumed);
         }
 
-        Ok(false)
+        Ok(ParseCharResult::Ignored)
     }
 
-    fn check_braces_opening(&mut self, current_char: char) -> Result<bool> {
-        if current_char == START && self.parsing_variable {
-            if self.open_braces {
-                anyhow::bail!("Double open braces")
-            }
-            self.open_braces = true;
-            return Ok(true);
+    fn check_braces_opening(&mut self, current_char: char) -> Result<ParseCharResult> {
+        if current_char != START {
+            return Ok(ParseCharResult::Ignored);
         }
 
-        Ok(false)
+        if self.state == State::ParsingVariable {
+            self.state = State::OpenBraces;
+            return Ok(ParseCharResult::Consumed);
+        }
+
+        if self.state == State::OpenBraces {
+            anyhow::bail!("Double open braces")
+        }
+
+        Ok(ParseCharResult::Ignored)
     }
 
-    fn check_braces_ending(&mut self, current_char: char) -> Result<bool> {
-        if current_char == END && self.parsing_variable {
-            if !self.open_braces {
-                anyhow::bail!("Closing braces without opening");
-            }
+    fn check_braces_ending(&mut self, current_char: char) -> Result<ParseCharResult> {
+        if current_char != END {
+            return Ok(ParseCharResult::Ignored);
+        }
+
+        if self.state == State::OpenBraces {
             self.write_variable()?;
-            return Ok(true);
+            return Ok(ParseCharResult::Consumed);
         }
 
-        Ok(false)
+        if self.state == State::ParsingVariable {
+            anyhow::bail!("Closing braces without opening");
+        }
+
+        Ok(ParseCharResult::Ignored)
     }
 
-    fn check_whitespace(&mut self, current_char: char) -> Result<bool> {
-        if current_char.is_ascii_whitespace() && self.parsing_variable {
-            if self.open_braces {
+    fn check_whitespace(&mut self, current_char: char) -> Result<ParseCharResult> {
+        if self.state != State::ParsingVariable && self.state != State::OpenBraces {
+            return Ok(ParseCharResult::Ignored);
+        }
+        if current_char.is_ascii_whitespace() {
+            if self.state == State::OpenBraces {
                 anyhow::bail!("Braces not closed");
             }
             self.write_variable()?;
             self.write_char(current_char)?;
-            return Ok(true);
+            return Ok(ParseCharResult::Consumed);
         }
-        Ok(false)
+        Ok(ParseCharResult::Ignored)
     }
 
     fn write_variable(&mut self) -> Result<()> {
@@ -177,8 +201,7 @@ where
     }
 
     fn reset_state(&mut self) {
-        self.open_braces = false;
-        self.parsing_variable = false;
+        self.state = State::TextOutput;
         self.current_variable_name.clear();
     }
 
