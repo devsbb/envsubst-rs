@@ -29,7 +29,6 @@ fn main() -> Result<()> {
         Box::new(File::create(output_file)?)
     } else {
         eprintln!("No output file specified, falling back to stdout");
-
         Box::new(stdout())
     };
     let mut parser = Parser::new(input, output, config.fail);
