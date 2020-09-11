@@ -15,6 +15,8 @@ struct Config {
     pub output: Option<PathBuf>,
     #[structopt(long, short, help = "Fail if a variable could not be found")]
     pub fail: bool,
+    #[structopt(long, short, help = "Variable delimiter")]
+    pub delimiter: Option<char>,
 }
 
 fn main() -> Result<()> {
@@ -31,7 +33,7 @@ fn main() -> Result<()> {
         eprintln!("No output file specified, falling back to stdout");
         Box::new(stdout())
     };
-    let mut parser = Parser::new(input, output, config.fail);
+    let mut parser = Parser::new(input, output, config.fail, config.delimiter);
     parser.process()?;
     Ok(())
 }

@@ -4,7 +4,6 @@ use std::io::{BufRead, BufWriter, Write};
 
 use anyhow::Result;
 
-const VARIABLE: char = b'$' as char;
 const START: char = b'{' as char;
 const END: char = b'}' as char;
 const VALID_CHARS: [char; 1] = [b'_' as char];
@@ -30,6 +29,7 @@ where
     input: R,
     output: BufWriter<W>,
     fail_when_not_found: bool,
+    delimiter: char,
 
     current_variable_name: String,
     state: State,
@@ -40,11 +40,12 @@ where
     R: BufRead,
     W: Write,
 {
-    pub fn new(input: R, output: W, fail_when_not_found: bool) -> Self {
+    pub fn new(input: R, output: W, fail_when_not_found: bool, delimiter: Option<char>) -> Self {
         Self {
             input,
             output: BufWriter::new(output),
             fail_when_not_found,
+            delimiter: delimiter.unwrap_or_else(default_delimiter),
             current_variable_name: "".to_owned(),
             state: State::TextOutput,
         }
@@ -118,7 +119,7 @@ where
     }
 
     fn start_parsing_variable(&mut self, current_char: char) -> Result<ParseCharResult> {
-        if current_char == VARIABLE {
+        if current_char == self.delimiter {
             if self.state == State::ParsingVariable {
                 anyhow::bail!("Variable is already being parsed")
             }
@@ -212,6 +213,10 @@ where
     }
 }
 
+pub fn default_delimiter() -> char {
+    b'$' as char
+}
+
 #[cfg(test)]
 mod tests {
     use std::env::set_var;
@@ -220,11 +225,11 @@ mod tests {
     use crate::parser::Parser;
     use std::panic;
 
-    fn render(template: &str, expected: &str, fail_when_not_found: bool) {
+    fn render(template: &str, expected: &str, fail_when_not_found: bool, delimiter: Option<char>) {
         let mut input = BufReader::new(Cursor::new(template));
         let mut output = Cursor::new(Vec::new());
         {
-            let mut parser = Parser::new(&mut input, &mut output, fail_when_not_found);
+            let mut parser = Parser::new(&mut input, &mut output, fail_when_not_found, delimiter);
             parser.process().unwrap();
         }
         let output = String::from_utf8(output.into_inner()).unwrap();
@@ -234,25 +239,31 @@ mod tests {
     #[test]
     fn test_simple_variable() {
         set_var("TEST_SIMPLE", "simple return");
-        render("$TEST_SIMPLE", "simple return", true);
+        render("$TEST_SIMPLE", "simple return", true, None);
+    }
+
+    #[test]
+    fn test_simple_variable_with_delimiter() {
+        set_var("TEST_SIMPLE", "simple return");
+        render("👻TEST_SIMPLE", "simple return", true, Some('👻'));
     }
 
     #[test]
     fn test_simple_quoted_variable() {
         set_var("TEST_SIMPLE", "simple return");
-        render("'$TEST_SIMPLE'", "'simple return'", true);
+        render("'$TEST_SIMPLE'", "'simple return'", true, None);
     }
 
     #[test]
     fn test_with_braces() {
         set_var("TEST_BRACES", "braces return");
-        render("${TEST_BRACES}", "braces return", true);
+        render("${TEST_BRACES}", "braces return", true, None);
     }
 
     #[test]
     fn test_with_quoted_braces() {
         set_var("TEST_BRACES", "braces return");
-        render("'${TEST_BRACES}'", "'braces return'", true);
+        render("'${TEST_BRACES}'", "'braces return'", true, None);
     }
 
     #[test]
@@ -263,13 +274,14 @@ mod tests {
             "simple: $TEST_SIMPLE\nbraces: ${TEST_BRACES}",
             "simple: simple return\nbraces: braces return",
             true,
+            None,
         );
     }
 
     #[test]
     fn test_missing() {
         for template in &["$TEST_MISSING", "${TEST_MISSING}"] {
-            render(template, "", false);
+            render(template, "", false, None);
         }
     }
 
@@ -278,7 +290,7 @@ mod tests {
         let mut input = BufReader::new(Cursor::new("${OPEN_BRACES"));
         let mut output = Cursor::new(Vec::new());
 
-        let mut parser = Parser::new(&mut input, &mut output, true);
+        let mut parser = Parser::new(&mut input, &mut output, true, None);
         let result = parser.process();
         assert!(result.is_err());
         let error = result.unwrap_err();
